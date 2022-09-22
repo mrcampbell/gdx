@@ -55,7 +55,7 @@ func (s *Scanner) scanToken() error {
 		s.addToken(LEFT_BRACE, nil)
 		break
 	case '}':
-		s.addToken(RIGHT_PAREN, nil)
+		s.addToken(RIGHT_BRACE, nil)
 		break
 	case ',':
 		s.addToken(COMMA, nil)
