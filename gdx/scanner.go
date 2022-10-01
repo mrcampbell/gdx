@@ -3,7 +3,29 @@ package gdx
 import (
 	"errors"
 	"fmt"
+	"strconv"
 )
+
+const TERMINATOR = '\x00'
+
+var keywordTokenMap map[string]TokenType = map[string]TokenType{
+	"and":    AND,
+	"class":  CLASS,
+	"else":   ELSE,
+	"false":  FALSE,
+	"for":    FOR,
+	"fun":    FUN,
+	"if":     IF,
+	"nil":    NIL,
+	"or":     OR,
+	"print":  PRINT,
+	"return": RETURN,
+	"super":  SUPER,
+	"this":   THIS,
+	"true":   TRUE,
+	"var":    VAR,
+	"while":  WHILE,
+}
 
 type Scanner struct {
 	source  string
@@ -18,6 +40,7 @@ func NewScanner(source string) *Scanner {
 }
 
 func (s *Scanner) ScanTokens() ([]Token, []error) {
+	// printGreen("SCAN TOKENS", nil)
 	errors := []error{}
 
 	for !s.isAtEnd() {
@@ -34,7 +57,9 @@ func (s *Scanner) ScanTokens() ([]Token, []error) {
 
 func (s *Scanner) addToken(tokenType TokenType, literal interface{}) {
 	text := s.source[s.start:s.current]
-	s.tokens = append(s.tokens, Token{tokenType: tokenType, lexeme: text, literal: literal, line: s.line})
+	t := Token{tokenType: tokenType, lexeme: text, literal: literal, line: s.line}
+	printYellow("ADD TOKEN %+v", t)
+	s.tokens = append(s.tokens, t)
 }
 
 func (s *Scanner) isAtEnd() bool {
@@ -105,7 +130,7 @@ func (s *Scanner) scanToken() error {
 		}
 	case '/':
 		if s.match('/') {
-			for !s.isAtEnd() && s.peek() != '\n' {
+			for !s.isAtEnd() && s.peek() != TERMINATOR {
 				s.advance()
 			}
 		} else {
@@ -119,27 +144,147 @@ func (s *Scanner) scanToken() error {
 	case '\n':
 		s.line = s.line + 1
 		break
+
+	case '"':
+		err := s.string()
+		if err != nil {
+			return err
+		}
+		break
 	default:
+		if s.isDigit(c) {
+			err := s.number()
+			if err != nil {
+				return err
+			}
+			break
+		}
+		if s.isAlpha(c) {
+			s.identifier()
+			break
+		}
+
 		return errors.New(fmt.Sprintf("Scanning Error [line %d] Unexpected Character: %v", s.line, c))
 	}
 	return nil
 }
 
+func (s *Scanner) isDigit(c byte) bool {
+	if c == TERMINATOR {
+		printGreen("IS DIGIT: TERMINATED, RETURNING FALSE")
+		return false
+	}
+	var result bool = (c >= '0' && c <= '9') && true
+	printGreen("IS DIGIT: %t", result)
+	return result
+}
+
+func (s *Scanner) isAlpha(c byte) bool {
+	if c == TERMINATOR {
+		printGreen("IS ALPHA: TERMINATED, RETURNING FALSE")
+		return false
+	}
+	result := (c >= 'a' && c <= 'z') ||
+		(c >= 'A' && c <= 'Z') ||
+		c == '_'
+	printGreen("IS ALPHA: ", result)
+
+	return result
+}
+
+func (s *Scanner) isAlphaNumeric(c byte) bool {
+	printGreen("IS ALPHANUMERIC", string(c))
+	return s.isAlpha(c) || s.isDigit(c)
+}
+
+func (s *Scanner) identifier() {
+	printGreen("IDENTIFIER")
+	for s.isAlphaNumeric(s.peek()) {
+		s.advance()
+	}
+	text := s.source[s.start:s.current]
+	if token, ok := keywordTokenMap[text]; ok {
+		s.addToken(token, nil)
+		return
+	}
+
+	s.addToken(IDENTIFIER, nil)
+	return
+}
+
+func (s *Scanner) number() error {
+	for s.isDigit(s.peek()) {
+		s.advance()
+	}
+	printRed("HERE")
+	if s.peek() == '.' && s.isDigit(s.peekNext()) {
+		fmt.Println("There's a number after the dot")
+		s.advance() // consume the '.'
+
+		// advance along the rest of the decimal
+		for s.isDigit(s.peek()) {
+			s.advance()
+		}
+	} else if s.peek() == '.' {
+		return errors.New("There is no number after the dot")
+	}
+	printRed("END HERE")
+
+	if f, err := strconv.ParseFloat(s.source[s.start:s.current], 32); err == nil {
+		s.addToken(NUMBER, f)
+	}
+
+	return nil
+}
+
+func (s *Scanner) string() error {
+	for s.peek() != '"' && !s.isAtEnd() {
+		if s.peek() == '\n' {
+			s.line = s.line + 1
+		}
+		s.advance()
+	}
+
+	if s.isAtEnd() {
+		return errors.New(fmt.Sprintf("Unterminated string at line! %d", 0))
+	}
+
+	s.advance() // the cloing '"'
+
+	value := s.source[s.start+1 : s.current-1]
+	s.addToken(STRING, value)
+	fmt.Println("Got string value: ", value)
+	return nil
+}
+
+func (s *Scanner) peekNext() byte {
+	if s.current+1 > len(s.source) {
+		Debug("PEEK NEXT: AT END OF FILE, RETURNING TERMINATOR")
+		return TERMINATOR
+	}
+	Debug("PEEK NEXT: ", s.source[s.current+1])
+	return s.source[s.current+1]
+}
+
 // this doesn't advance, it's purely a lookahead
 func (s *Scanner) peek() byte {
 	if s.isAtEnd() {
-		return '\n'
+		Debug("PEEK: AT END OF FILE, RETURNING TERMINATOR")
+		return TERMINATOR
 	}
 
+	Debug("PEEK: ", string(s.source[s.current]))
 	return s.source[s.current]
 }
 
 // only advance if the character is what we expect
 func (s *Scanner) match(expected byte) bool {
 	if s.isAtEnd() {
+		Debug("MATCH, AT END OF FILE, Returning `false`")
 		return false
 	}
 	if s.source[s.current] != expected {
+		Debug("MATCH: NO MATCH", "current", s.current, "expected", expected)
 		return false
 	}
 	s.current = s.current + 1
@@ -150,5 +295,6 @@ func (s *Scanner) match(expected byte) bool {
 func (s *Scanner) advance() byte {
 	c := s.source[s.current]
 	s.current = s.current + 1
+	Debug("ADVANCE: ", string(c))
 	return c
 }

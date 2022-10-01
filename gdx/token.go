@@ -69,5 +69,5 @@ func NewToken(tokenType TokenType, lexeme string, literal interface{}, line int)
 }
 
 func (t *Token) ToString() string {
-	return fmt.Sprintf("%d %s %v", t.tokenType, string(t.lexeme), t.literal)
+	return fmt.Sprintf("%s %s %v", t.tokenType, string(t.lexeme), t.literal)
 }
