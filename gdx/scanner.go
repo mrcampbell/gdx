@@ -133,6 +133,8 @@ func (s *Scanner) scanToken() error {
 			for !s.isAtEnd() && s.peek() != TERMINATOR {
 				s.advance()
 			}
+		} else if s.match('*') {
+			s.blockComment()
 		} else {
 			s.addToken(SLASH, nil)
 		}
@@ -210,6 +212,26 @@ func (s *Scanner) identifier() {
 
 	s.addToken(IDENTIFIER, nil)
 	return
+}
+
+func (s *Scanner) blockComment() error {
+	for s.peek() != '*' && s.peekNext() != '/' && !s.isAtEnd() {
+		if s.peek() == '\n' {
+			s.line = s.line + 1
+		}
+		s.advance()
+	}
+
+	if s.isAtEnd() {
+		return errors.New(fmt.Sprintf("Unterminated string at line! %d", 0))
+	}
+
+	s.advance() // the cloing '*'
+	s.advance() // the cloing '/'
+
+	comment := s.source[s.start:s.current]
+	fmt.Println("removed block comment: ", comment)
+	return nil
 }
 
 func (s *Scanner) number() error {
